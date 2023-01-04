@@ -1,0 +1,109 @@
+---
+title: "CRC.Step1.Data processing"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo                  = TRUE
+                      ,warning              = FALSE
+                      ,message              = FALSE
+                      ,error                = TRUE
+                      ,dev                  = c('png','pdf')
+                      ,pdf.options(encoding = "ISOLatin9.enc", useKerning=FALSE, useDingbats=FALSE)
+)                      
+```
+
+```{r libraries}
+library(Seurat)
+library(ggplot2)
+library(ggpubr)
+```
+
+```{r Reading in the data}
+# Creating the Seurat Object
+setwd("/mnt/data1/elyas/Single-cell/LOY/CRC/")
+Count.10x <- read.table("../CRC/GSE146771_CRC.Leukocyte.10x.TPM.txt", header = TRUE)
+
+meta.10x <- read.delim("/mnt/data1/elyas/Single-cell/LOY/CRC/GSE146771_CRC.Leukocyte.10x.Metadata.txt")
+
+int.10x <- intersect(names(Count.10x), meta.10x$CellName)
+
+rownames(meta.10x) <- meta.10x$CellName
+Count.10x <- Count.10x[,match((meta.10x$CellName),names(Count.10x))]
+LOY.CRC.10x <- CreateSeuratObject(Count.10x, project = "LOY-CRC.10x")
+LOY.CRC.10x@meta.data[,4:27] <- meta.10x
+
+LOY.CRC.10x$Tissue <- sub("N","Normal", LOY.CRC.10x$Tissue)
+LOY.CRC.10x$Tissue <- sub("P","Blood", LOY.CRC.10x$Tissue)
+LOY.CRC.10x$Tissue <- sub("T","Tumor", LOY.CRC.10x$Tissue)
+
+saveRDS(LOY.CRC.10x, "../Github/LOY.CRC.rds")
+```
+
+
+
+```{r Identifying LOY}
+LOY.CRC.10x <- readRDS("../Github/LOY.CRC.rds")
+
+LOY.CRC.10x <- SplitObject(LOY.CRC.10x, split.by = "Sample")
+# Adding ages to metadata
+LOY.CRC.10x$P0408$Age <- "86"
+LOY.CRC.10x$P0613$Age <- "89"
+LOY.CRC.10x$P1025$Age <- "40"
+LOY.CRC.10x$P1026$Age <- "52"
+
+LOY.CRC.10x <- merge(LOY.CRC.10x$P0408, c(LOY.CRC.10x$P0613,LOY.CRC.10x$P1025,LOY.CRC.10x$P1026))
+
+# Renaming the CD4 T cells with markers representing Regulatory T cells to Tregs
+LOY.CRC.10x$Sub_Cluster <- sub("hT08_CD4-IL23R", "hTO8_CD4_treg", LOY.CRC.10x$Sub_Cluster)
+LOY.CRC.10x$Sub_Cluster <- sub("hT11_CD4-CTLA4", "hTO8_CD4_treg", LOY.CRC.10x$Sub_Cluster)
+
+# Finding the cells with Lose of Chromosome Y (LOY)
+LOY_genes <- c("RPS4Y1", "ZFY", "USP9Y", "DDX3Y", "KDM5D", "EIF1AY")
+LOY.CRC.10x[["percent.LOY"]] <- PercentageFeatureSet(LOY.CRC.10x, features = LOY_genes)
+LOY.CRC.10x$LOY <- ifelse(LOY.CRC.10x$percent.LOY==0,  "LOY", "non-LOY") 
+```
+
+```{r Dim reduction}
+# Modifying CD4 and CD8 cells
+LOY.CRC.10x <- SplitObject(LOY.CRC.10x, split.by = "Global_Cluster")
+LOY.CRC.10x$`CD4 T cell`$Global_Cluster <- ifelse(LOY.CRC.10x$`CD4 T cell`$Sub_Cluster=="hTO8_CD4_treg","Treg","Th")
+
+
+LOY.CRC.10x$`CD4 T cell` <- FindVariableFeatures(LOY.CRC.10x$`CD4 T cell`,verbose = F) 
+LOY.CRC.10x$`CD4 T cell` <- ScaleData(LOY.CRC.10x$`CD4 T cell`,verbose = F) 
+LOY.CRC.10x$`CD4 T cell` <- RunPCA(LOY.CRC.10x$`CD4 T cell`,verbose = F,npcs = 30) 
+LOY.CRC.10x$`CD4 T cell` <- RunUMAP(LOY.CRC.10x$`CD4 T cell`,verbose = F,dims = 1:30) 
+
+
+LOY.CRC.10x$`CD8 T cell` <- FindVariableFeatures(LOY.CRC.10x$`CD8 T cell`,verbose = F) 
+LOY.CRC.10x$`CD8 T cell` <- ScaleData(LOY.CRC.10x$`CD8 T cell`,verbose = F) 
+LOY.CRC.10x$`CD8 T cell` <- RunPCA(LOY.CRC.10x$`CD8 T cell`,verbose = F,npcs = 30) 
+LOY.CRC.10x$`CD8 T cell` <- RunUMAP(LOY.CRC.10x$`CD8 T cell`,verbose = F,dims = 1:30) 
+
+
+```
+
+```{r}
+DimPlot( LOY.CRC.10x$`CD4 T cell`, group.by = "Global_Cluster")+ggtitle(bquote(''~CD4^"+"~"T cells"))
+DimPlot( LOY.CRC.10x$`CD8 T cell`, group.by = "Global_Cluster")+ggtitle(bquote(''~CD8^"+"~"T cells"))
+```
+
+```{r}
+#The status of Y gene expression in different CD4 T cells
+LOY.CRC.10x$`CD4 T cell`$Treg.LOY <- paste0(LOY.CRC.10x$`CD4 T cell`$LOY,"_",LOY.CRC.10x$`CD4 T cell`$Global_Cluster)
+
+LOY.CRC.10x$`CD4 T cell`$Treg.LOY <- factor(LOY.CRC.10x$`CD4 T cell`$Treg.LOY, levels = c("non-LOY_Th","LOY_Th","non-LOY_Treg","LOY_Treg"))
+
+CD4 <- LOY.CRC.10x$`CD4 T cell`
+CD4.spl <- SplitObject(CD4, split.by = "Global_Cluster")
+CD4_Treg <- CD4.spl$Treg
+CD4_Th <- CD4.spl$Th 
+CD8 <- LOY.CRC.10x$`CD8 T cell`
+
+
+VlnPlot(CD4,group.by = "Treg.LOY", features = "percent.LOY", pt.size = 0)+ggtitle(bquote(''~CD4^"+"~"T cells"))
+
+save(CD4,CD4_Treg,CD4_Th,CD8,file = "../Github/T_cells.Rdata")
+```
+

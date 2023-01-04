@@ -1,0 +1,357 @@
+---
+title: "Step2.Visualization"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo                  = TRUE
+                      ,warning              = FALSE
+                      ,message              = FALSE
+                      ,error                = TRUE
+                      ,dev                  = c('png','pdf')
+                      ,pdf.options(encoding = "ISOLatin9.enc", useKerning=FALSE, useDingbats=FALSE)
+)                      
+```
+
+
+```{r libraries}
+library(Seurat)
+library(ggplot2)
+library(ggpubr)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+```
+
+```{r data loading}
+load( "../Github/T_cells.Rdata")
+```
+
+
+```{r spliting}
+# Splitting the CD4 T cells to Treg and Th in Tumor
+
+CD4_Treg <- SplitObject(CD4_Treg, split.by = "Tissue")
+CD4_Treg.T <- CD4_Treg$Tumor
+CD4_Th <- SplitObject(CD4_Th, split.by = "Tissue")
+CD4_Th.T <- CD4_Th$Tumor
+
+
+CD4_Treg.T <- FindVariableFeatures(CD4_Treg.T,verbose = F,dispersion.cutoff = c(0.5,Inf),mean.cutoff = c(0.05,10),nfeatures = 8000)
+CD4_Treg.T <- ScaleData(CD4_Treg.T,verbose = F)
+CD4_Treg.T <- RunPCA(CD4_Treg.T,verbose = F)
+CD4_Treg.T <- RunUMAP(CD4_Treg.T, dims = 1:20,verbose = F)
+CD4_Treg.T <- SetIdent(CD4_Treg.T,value = "LOY")
+
+```
+
+```{r, fig.width=10,fig.height=3}
+# Candidate Immune supressive genes:
+
+## CTLA4 or CTLA4, also known as CD152, is a protein receptor that functions as an immune checkpoint and downregulates immune responses
+## PDCD1
+## TIGIT
+
+CD4_Treg.T <- SetIdent(CD4_Treg.T, value = "LOY")
+
+gene.list <- c("PDCD1","TIGIT","IKZF2")
+
+j=32
+c=1
+x <- setNames(replicate(3,data.frame()),gene.list)
+y <- setNames(replicate(3,data.frame()),gene.list)
+
+for (i in gene.list) {
+  
+# Adding the gene expression scores
+CD4_Treg.T <- AddModuleScore(CD4_Treg.T, features = i,name = paste0(i,"_score"),seed = 1)
+score <- subset(as.data.frame(table(CD4_Treg.T$LOY,CD4_Treg.T@meta.data[,j])), Freq>0)
+score$Var2 <- as.numeric(as.character(score$Var2))
+names(score) <- c("Treg_LOY_stat", "Score of expression","Frequency")
+
+x[[c]] <- RidgePlot(CD4_Treg.T, features = colnames(CD4_Treg.T@meta.data)[j], ncol = 1)+scale_x_continuous(limits =c(0,5))+ylab("Density")+theme(legend.position = "none")+ggtitle("")
+y[[c]] <- VlnPlot(CD4_Treg.T, features = colnames(CD4_Treg.T@meta.data)[j],pt.size = 0)+ylab("Expression score")+ylim(0,4)+ggtitle(paste0(i))+stat_summary(fun.y = median, geom='point', size = 25, colour = "black", shape = 95)+theme(legend.position = "none")+scale_fill_manual(values=c("#00BFB4","#F8766D"))
+
+print(wilcox.test(as.data.frame(subset(score, Treg_LOY_stat=="LOY"))$`Score of expression`,  as.data.frame(subset(score, Treg_LOY_stat=="non-LOY"))$`Score of expression`))
+
+j=j+1
+c=c+1
+}
+
+figure1 <- ggarrange(x$PDCD1,x$TIGIT,x$IKZF2, 
+                    ncol = 3, nrow = 1)
+figure2 <- ggarrange(y$PDCD1,y$TIGIT,y$IKZF2, 
+                    ncol = 3, nrow = 1)
+figure1
+figure2
+
+
+vln.df1 <- data.frame(Scores=c(CD4_Treg.T$PDCD1_score1,CD4_Treg.T$TIGIT_score1,CD4_Treg.T$IKZF2_score1),
+                     LOY=rep(CD4_Treg.T$LOY,3),
+           Gene=c(rep("PDCD1",length(CD4_Treg.T$PDCD1_score1)),  rep("TIGIT",length(CD4_Treg.T$TIGIT_score1)),
+           rep("IKZF2",length(CD4_Treg.T$IKZF2_score1)))
+           )
+
+vln.df1$LOY <- factor(vln.df1$LOY, levels = c("non-LOY","LOY"))
+library(ggplot2)
+library(introdataviz)
+
+ggplot(vln.df1, aes(x = Gene, y = Scores, fill = LOY)) +
+  geom_split_violin()+ylim(0,4)+stat_summary(fun = mean, fun.min = mean, fun.max = mean,
+               geom = "crossbar", 
+               width = 0.25,
+               position = position_dodge(width = .25))+guides(fill = guide_legend(override.aes = list(linetype = 0)),
+         color = guide_legend(override.aes = list(linetype = 0)))+theme_classic()+theme(axis.text = element_text(size = 12,colour = "black"))+rotate_x_text(45)  +theme(axis.title = element_text(size = 14,face = "bold"),strip.text = element_text(size = 12,face = "bold"))+ylab("Expression scores")+ xlab( "Immunosupressive genes in Tregs")+scale_fill_manual(values=c("#00BFB4","#F8766D"))
+
+for (i in gene.list) {
+print(wilcox.test(as.data.frame(subset(vln.df1, LOY=="LOY" & Gene==i))$Scores,  as.data.frame(subset(vln.df1, LOY=="non-LOY"& Gene==i))$Scores))
+}
+```
+
+
+```{r}
+# Correlation of highly variable genes
+corr.CD4s <- rcorr(as.matrix(t(CD4_Treg.T@assays$RNA@scale.data)), type = "pearson")
+# saveRDS(corr.CD4s, "../CRC/corr.CD4s.rds")
+# corr.CD4s <- readRDS("../CRC/corr.CD4s.rds")
+
+flattenCorrMatrix <- function(cormat, pmat) {
+  ut <- upper.tri(cormat)
+  data.frame(
+    row = rownames(cormat)[row(cormat)[ut]],
+    column = rownames(cormat)[col(cormat)[ut]],
+    cor  =(cormat)[ut],
+    p = pmat[ut]
+    )
+}
+
+```
+
+```{r}
+# Top ten correlated genes with the candidate genes (i.e., "PDCD1","TIGIT","IKZF2")
+
+corr.CD4 <- flattenCorrMatrix(corr.CD4s$r, corr.CD4s$P)
+corr.CD4$adj.p <- p.adjust(corr.CD4$p, method = "fdr")
+
+corr.CD4.1 <- subset(corr.CD4, adj.p < 0.05 & cor > 0 & row== gene.list[1]|column==gene.list[1])
+corr.CD4.2 <- subset(corr.CD4, adj.p < 0.05 & cor > 0 & row== gene.list[2]|column==gene.list[2])
+corr.CD4.3 <- subset(corr.CD4, adj.p < 0.05 & cor > 0 & row== gene.list[3]|column==gene.list[3])
+
+
+corr.CD4.1 <- corr.CD4.1[order(corr.CD4.1$cor,decreasing = T),]
+corr.CD4.2 <- corr.CD4.2[order(corr.CD4.2$cor,decreasing = T),]
+corr.CD4.3 <- corr.CD4.3[order(corr.CD4.3$cor,decreasing = T),]
+
+rownames(corr.CD4.1) <- NULL
+rownames(corr.CD4.2) <- NULL
+rownames(corr.CD4.3) <- NULL
+
+
+corr.CD4.1 <- corr.CD4.1[1:10,]
+corr.CD4.2 <- corr.CD4.2[1:10,]
+corr.CD4.3 <- corr.CD4.3[1:10,]
+```
+
+```{r Sub_cells,echo=FALSE,fig.show='hold', out.width="100%", fig.fullwidth = TRUE, fig.width=7, fig.height=7}
+#Merging the CD8 and CD4 T cells
+CD4.8 <- merge(CD4,CD8)
+meta <- as.data.frame(CD4.8@meta.data)
+
+Patient <- c(unique(meta$Sample))
+Region <- c(unique(meta$Tissue))
+Cell <- c(unique(meta$Global_Cluster))
+Sub_Cell <- c(unique(meta$Sub_Cluster))
+LOY <- c(unique(meta$LOY))
+
+sub <- data.frame(matrix(ncol = 7, nrow = 0))
+sub.Patient <- c()
+sub.Region <- c()
+sub.Cell <- c()
+sub.Sub_Cell <- c()
+
+for (a in Patient) {
+  for (b in Region) {
+    for (c in Cell) {
+      for (d in Sub_Cell) {
+        firstsub <- as.data.frame(table(subset(meta, Sample==a & Tissue==b & Global_Cluster==c & Sub_Cluster==d)$LOY))
+          sub <- rbind(sub,as.data.frame(table(subset(meta, Sample==a & Tissue==b & Global_Cluster==c & Sub_Cluster==d)$LOY)))
+          sub.Patient <- c(sub.Patient, rep(a, length(firstsub[,1])))
+          sub.Region <- c(sub.Region, rep(b, length(firstsub[,1])))
+          sub.Cell <- c(sub.Cell, rep(c, length(firstsub[,1])))
+          sub.Sub_Cell <- c(sub.Sub_Cell, rep(d, length(firstsub[,1])))
+      }
+      
+    }
+  }
+  
+  }
+
+
+
+loy.number <- data.frame(loy.stat=sub[,1],
+                         loy.n=sub[,2],
+                         Patient=sub.Patient,
+                         Region=sub.Region,
+                         Cell=sub.Cell,
+                         subCell=sub.Sub_Cell)
+
+
+# Extracting the cells with both LOY and  nonLOY in each region
+
+Patient <- c(unique(loy.number$Patient))
+Region <- c(unique(loy.number$Region))
+Cell <- c(unique(loy.number$Cell))
+Sub_Cell <- c(unique(loy.number$subCell))
+
+data1<-  data.frame(matrix(ncol = 6, nrow = 0))
+data2<-  data.frame(matrix(ncol = 6, nrow = 0))
+
+
+for (x in Patient) {
+  for (y in Region) {
+    for (z in Cell) {
+      for (w in Sub_Cell) {
+          
+      data.sub = subset(loy.number, loy.number$Patient==x & loy.number$Region==y & loy.number$Cell==z & loy.number$subCell==w )
+      if (length(data.sub$Patient)==2) {
+       data1= rbind(data1,data.sub)
+      }
+      else {
+        data2=rbind(data2,data.sub)
+      }}
+    }
+  }
+}
+
+
+# Ratio calclasion 
+
+Patient <- c(unique(data1$Patient))
+Region <- c(unique(data1$Region))
+Cell <- c(unique(data1$Cell))
+Sub_Cell <- c(unique(data1$subCell))
+
+ratio <-  data.frame(matrix(ncol = 7, nrow = 0))
+
+for (x in Patient) {
+  for (y in Region) {
+    for (z in Cell) {
+      for (w in Sub_Cell) {
+
+      data.sub = subset(data1, data1$Patient==x & data1$Region==y & data1$Cell==z & data1$subCell==w)
+      sub <- data.frame(ratio=data.sub[1:2,2][1]/(data.sub[1:2,2][1]+data.sub[1:2,2][2]),
+             subCell=unique(data.sub[1:2,6]),
+             Tissue=unique(data.sub[1:2,4]),
+             Global_Cluster=unique(data.sub[1:2,5]),
+             Patient=unique(data.sub[1:2,3]),
+             Sum=(data.sub[1:2,2][1]+data.sub[1:2,2][2])
+             )
+  ratio <- rbind(ratio,sub)
+}}}}
+  
+ratio <- na.omit(ratio)
+
+ratio.sub <- subset(ratio, Sum > 15)
+
+ratio.sub$ratio <- ratio.sub$ratio*100
+```
+
+
+
+```{r plot,echo=FALSE,fig.show='hold', out.width="100%", fig.fullwidth = TRUE, fig.width=7, fig.height=4}
+ratio.sub$Tissue <- factor(ratio.sub$Tissue, levels = c("Blood", "Normal", "Tumor"))
+ratio.sub <- subset(ratio.sub,Tissue != "Blood")
+ratio.sub$Global_Cluster<- factor(ratio.sub$Global_Cluster, levels = c("Th","Treg","CD8 T cell"))
+
+# ratio.sub$Tissue <- sub("Normal","N",ratio.sub$Tissue)
+# ratio.sub$Tissue <- sub("Tumor","T",ratio.sub$Tissue)
+# ratio.sub$Tissue <- sub("Blood","B",ratio.sub$Tissue)
+ratio.sub$Global_Cluster <- sub("CD8 T cell","CD8",ratio.sub$Global_Cluster)
+
+ratio.sub$Cell.tissue <- paste0(ratio.sub$Global_Cluster,"_",ratio.sub$Tissue)
+
+
+ratio.sub$Global_Cluster <- factor(ratio.sub$Global_Cluster, levels = c("Th", "Treg", "CD8"))
+
+
+
+ggplot(ratio.sub, aes(x=Global_Cluster, y=ratio)) + 
+    geom_boxplot(fill="gray")+
+    facet_wrap(~Tissue)+theme_classic()+theme(axis.text = element_text(size = 12,colour = "black"))+rotate_x_text(45)  +theme(axis.title = element_text(size = 14,face = "bold"),strip.text = element_text(size = 12,face = "bold"))+ylab("%LOY (scRNA-seq)")+ xlab( "")
+
+
+wilcox.test(as.data.frame(subset(ratio.sub, Tissue=="Tumor"&Global_Cluster=="Treg"))$ratio, as.data.frame(subset(ratio.sub, Tissue=="Tumor" &Global_Cluster=="Th"))$ratio)
+wilcox.test(as.data.frame(subset(ratio.sub, Tissue=="Normal"&Global_Cluster=="Treg"))$ratio, as.data.frame(subset(ratio.sub, Tissue=="Normal" &Global_Cluster=="Th"))$ratio)
+wilcox.test(as.data.frame(subset(ratio.sub, Tissue=="Tumor"&Global_Cluster=="Treg"))$ratio, as.data.frame(subset(ratio.sub, Tissue=="Normal" &Global_Cluster=="Treg"))$ratio)
+
+wilcox.test(as.data.frame(subset(ratio.sub, Tissue=="Tumor"&Global_Cluster=="Treg"))$ratio, as.data.frame(subset(ratio.sub, Tissue=="Tumor" &Global_Cluster=="CD8"))$ratio)
+
+
+```
+
+
+
+
+
+```{r}
+
+# Results frim ddPCR
+
+Tissues <- read.csv("/mnt/data1/elyas/Single-cell/LOY/CRC/Pic/New/Tissues (1).csv", sep=";")
+Treg <- read.csv("/mnt/data1/elyas/Single-cell/LOY/CRC/Pic/New/Treg_NonTreg_CD8.csv", sep=";")
+
+Tissue.list <- c()
+LOY <-c()
+for (i in 1:6) {
+ Tissue.list <- c(Tissue.list, rep(names(Tissues)[i],10)) 
+ LOY <- c(LOY,c(Tissues[,i]) )
+}
+
+Tissue.list2 <- c()
+LOY2 <-c()
+for (i in 1:6) {
+ Tissue.list2 <- c(Tissue.list2, rep(names(Treg)[i],49)) 
+ LOY2 <- c(LOY2,c(Treg[,i]) )
+}
+
+
+Tissues <- data.frame(Tissues=Tissue.list,
+                      LOY=LOY)
+Treg <- data.frame(Tissues=Tissue.list2,
+                      LOY=LOY2)
+
+
+Tissues$Type <- str_extract(Tissues$Tissues,".*_")
+Tissues$Tissue <- str_extract(Tissues$Tissues,"_.*")
+Tissues$Type <- sub("_","",Tissues$Type)
+Tissues$Tissue <- sub("_","",Tissues$Tissue)
+
+Treg$Type <- str_extract(Treg$Tissues,".*_")
+Treg$Cell <- str_extract(Treg$Tissues,"_.*")
+Treg$Type <- sub("_","",Treg$Type)
+Treg$Cell <- sub("_","",Treg$Cell)
+Treg$Type <-sub("Ctrl", "Control", Treg$Type)
+
+
+
+
+# Tissues$Tissues <- sub("Normal","N",Tissues$Tissues)
+# Tissues$Tissues <- sub("Tumor","T",Tissues$Tissues)
+# Tissues$Tissues <- sub("Blood","B",Tissues$Tissues)
+
+Tissues$Tissues <- factor(Tissues$Tissues, levels = c("CRC_T", "CRC_N", "CRC_B", "LM_T",  "LM_N",  "LM_B" ))
+Treg$Tissues <- factor(Treg$Tissues,levels = c(  "CRC_Th", "CRC_Treg",    "CRC_CD8",   "Ctrl_Th", "Ctrl_Treg",  "Ctrl_CD8") )
+Treg$Cell <- factor(Treg$Cell,levels = c(  "Th", "Treg",    "CD8") )
+
+
+ggplot(Tissues, aes(x=Tissue, y=LOY)) + 
+    geom_boxplot(fill="gray")+
+    facet_wrap(~Type)+theme_classic()+theme(axis.text = element_text(size = 12,colour = "black"))+rotate_x_text(45)  +theme(axis.title = element_text(size = 14,face = "bold"),strip.text = element_text(size = 12,face = "bold"))+ylab("%LOY (ddPCR)")+ xlab( "")
+
+
+
+ggplot(na.omit(Treg), aes(x=Cell, y=LOY)) + 
+    geom_boxplot(fill="gray")+
+    facet_wrap(~Type)+theme_classic()+theme(axis.text = element_text(size = 12,colour = "black"))+rotate_x_text(45)  +theme(axis.title = element_text(size = 14,face = "bold"),strip.text = element_text(size = 12,face = "bold"))+ylab("%LOY (ddPCR)")+ xlab( "")
+
+```
