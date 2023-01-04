@@ -45,7 +45,7 @@ CD4_Treg.T <- SetIdent(CD4_Treg.T,value = "LOY")
 
 ```
 
-```{r, fig.width=10,fig.height=3}
+```{r Gene expression score, fig.width=10,fig.height=3}
 # Candidate Immune supressive genes:
 
 ## CTLA4 or CTLA4, also known as CD152, is a protein receptor that functions as an immune checkpoint and downregulates immune responses
@@ -109,7 +109,7 @@ print(wilcox.test(as.data.frame(subset(vln.df1, LOY=="LOY" & Gene==i))$Scores,  
 ```
 
 
-```{r}
+```{r Pearson correlation}
 # Correlation of highly variable genes
 corr.CD4s <- rcorr(as.matrix(t(CD4_Treg.T@assays$RNA@scale.data)), type = "pearson")
 # saveRDS(corr.CD4s, "../CRC/corr.CD4s.rds")
@@ -127,7 +127,7 @@ flattenCorrMatrix <- function(cormat, pmat) {
 
 ```
 
-```{r}
+```{r Extracting the correlations}
 # Top ten correlated genes with the candidate genes (i.e., "PDCD1","TIGIT","IKZF2")
 
 corr.CD4 <- flattenCorrMatrix(corr.CD4s$r, corr.CD4s$P)
@@ -289,13 +289,9 @@ wilcox.test(as.data.frame(subset(ratio.sub, Tissue=="Tumor"&Global_Cluster=="Tre
 
 ```
 
+```{r Experimental plots}
 
-
-
-
-```{r}
-
-# Results frim ddPCR
+# Results from ddPCR
 
 Tissues <- read.csv("/mnt/data1/elyas/Single-cell/LOY/CRC/Pic/New/Tissues (1).csv", sep=";")
 Treg <- read.csv("/mnt/data1/elyas/Single-cell/LOY/CRC/Pic/New/Treg_NonTreg_CD8.csv", sep=";")
