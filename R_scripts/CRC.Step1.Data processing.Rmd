@@ -40,8 +40,6 @@ LOY.CRC.10x$Tissue <- sub("T","Tumor", LOY.CRC.10x$Tissue)
 saveRDS(LOY.CRC.10x, "./dir/LOY.CRC.rds")
 ```
 
-
-
 ```{r Identifying LOY}
 LOY.CRC.10x <- readRDS("./dir/LOY.CRC.rds")
 
@@ -103,4 +101,3 @@ VlnPlot(CD4,group.by = "Treg.LOY", features = "percent.LOY", pt.size = 0)+ggtitl
 
 save(CD4,CD4_Treg,CD4_Th,CD8,file = "../Github/T_cells.Rdata")
 ```
-
