@@ -24,9 +24,7 @@ library(org.Hs.eg.db)
 ```
 
 ```{r Reading the data, fig.width=20, fig.height=5}
-
-
-dir1 <- "/mnt/data1/elyas/Single-cell/LOY/Atlas/"
+dir1 <- "./dir"
 Metadata <- read.csv(paste0(dir1,"TICAtlas_metadata.csv"))
 # Count <- read.csv(paste0(dir1,"TICAtlas_integrated_matrix.csv"))
 # saveRDS(Count,(paste0(dir1,"Count.rds")))
@@ -74,9 +72,8 @@ male <- merge(unknown.male,male)
 saveRDS(male, "/mnt/data1/elyas/Single-cell/LOY/Atlas/male.rds")
 ```
 
-
 ```{r Table}
-male <- readRDS("/mnt/data1/elyas/Single-cell/LOY/Atlas/male.rds")
+male <- readRDS("./dir/Atlas/male.rds")
 
 male <- FindVariableFeatures(male,assay = "RNA",verbose = F)
 male@assays$integrated@var.features <- rownames(male@assays$integrated@data)
@@ -126,24 +123,18 @@ for (i in patients) {
   }
 }
 
-
 z <- na.omit(z)
 z <- subset(z, Sum>50)
 
-saveRDS(z,"/mnt/data1/elyas/Single-cell/LOY/Atlas/loy.perc.RDS")
+saveRDS(z,"./dir/Atlas/loy.perc.RDS")
 ```
 
 ```{r Plot LOY}
 # Defining per cell type LOY percentage 
-
-z <- readRDS("/mnt/data1/elyas/Single-cell/LOY/Atlas/loy.perc.RDS")
+z <- readRDS("./dir/Atlas/loy.perc.RDS")
 z <- subset(z, Sum>50 & Cancer!= "NSCLC" &Cancer!= "RCC")
 
-
 z$Cancer <- factor(z$Cancer, levels = c("CRC",  "HCC",  "ICC",  "CM",   "PDAC", "BCC",  "SCC",  "UM"))
-
-
-
 
 CH <- ggboxplot(z , x = "Cancer", y = "LOY.Percentage"
 ,fill = "Cancer"
@@ -184,8 +175,6 @@ CH <-ggplot(treg, aes(x=Cell.Type.new, y=LOY.Percentage,fill=Cancer)) +
     geom_boxplot()+theme_classic()+theme(axis.text = element_text(size = 12,colour = "black"))+rotate_x_text(45)  +theme(axis.title = element_text(size = 14,face = "bold"),strip.text = element_text(size = 12,face = "bold"),legend.position = "none")+ylab("%LOY (scRNA-seq)")+ xlab( "")+facet_wrap(~Cancer, ncol = 4)
 
 
-
-
 CH+scale_fill_manual(values=c("cyan2",
                                "grey",
                                "grey",
@@ -204,11 +193,8 @@ for (i in c(unique(treg$Cancer))[-3]) {
                  p.adjust.method = "bonf"))
 }
 
-
 wilcox.test(subset(treg,Cell.Type.new=="Th"&Cancer=="CRC")$LOY.Percentage, subset(treg,Cell.Type.new=="Treg"&Cancer=="CRC")$LOY.Percentage,
                  p.adjust.method = "bonf")
-
-
 ```
 
 
@@ -249,14 +235,9 @@ j=j+1
 c=c+1
 }
 
-
-
-
 figure <- ggarrange(y$PDCD1,y$TIGIT,y$IKZF2, 
                     ncol = 3, nrow = 1)
 figure
-
-
 
 vln.df <- data.frame(Scores=c(CRC$PDCD1_score1,CRC$TIGIT_score1,CRC$IKZF2_score1),
                      LOY=rep(CRC$LOY,3),
