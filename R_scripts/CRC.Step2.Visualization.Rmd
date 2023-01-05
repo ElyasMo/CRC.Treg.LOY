@@ -24,18 +24,15 @@ library(org.Hs.eg.db)
 ```
 
 ```{r data loading}
-load( "../Github/T_cells.Rdata")
+load( "./dir/T_cells.Rdata")
 ```
-
 
 ```{r spliting}
 # Splitting the CD4 T cells to Treg and Th in Tumor
-
 CD4_Treg <- SplitObject(CD4_Treg, split.by = "Tissue")
 CD4_Treg.T <- CD4_Treg$Tumor
 CD4_Th <- SplitObject(CD4_Th, split.by = "Tissue")
 CD4_Th.T <- CD4_Th$Tumor
-
 
 CD4_Treg.T <- FindVariableFeatures(CD4_Treg.T,verbose = F,dispersion.cutoff = c(0.5,Inf),mean.cutoff = c(0.05,10),nfeatures = 8000)
 CD4_Treg.T <- ScaleData(CD4_Treg.T,verbose = F)
@@ -108,7 +105,6 @@ print(wilcox.test(as.data.frame(subset(vln.df1, LOY=="LOY" & Gene==i))$Scores,  
 }
 ```
 
-
 ```{r Pearson correlation}
 # Correlation of highly variable genes
 corr.CD4s <- rcorr(as.matrix(t(CD4_Treg.T@assays$RNA@scale.data)), type = "pearson")
@@ -179,14 +175,10 @@ for (a in Patient) {
           sub.Region <- c(sub.Region, rep(b, length(firstsub[,1])))
           sub.Cell <- c(sub.Cell, rep(c, length(firstsub[,1])))
           sub.Sub_Cell <- c(sub.Sub_Cell, rep(d, length(firstsub[,1])))
-      }
-      
+      }     
     }
+   }
   }
-  
-  }
-
-
 
 loy.number <- data.frame(loy.stat=sub[,1],
                          loy.n=sub[,2],
@@ -206,7 +198,6 @@ Sub_Cell <- c(unique(loy.number$subCell))
 data1<-  data.frame(matrix(ncol = 6, nrow = 0))
 data2<-  data.frame(matrix(ncol = 6, nrow = 0))
 
-
 for (x in Patient) {
   for (y in Region) {
     for (z in Cell) {
@@ -218,11 +209,11 @@ for (x in Patient) {
       }
       else {
         data2=rbind(data2,data.sub)
-      }}
+       }
+      }
     }
   }
 }
-
 
 # Ratio calclasion 
 
@@ -256,8 +247,6 @@ ratio.sub <- subset(ratio, Sum > 15)
 ratio.sub$ratio <- ratio.sub$ratio*100
 ```
 
-
-
 ```{r plot,echo=FALSE,fig.show='hold', out.width="100%", fig.fullwidth = TRUE, fig.width=7, fig.height=4}
 ratio.sub$Tissue <- factor(ratio.sub$Tissue, levels = c("Blood", "Normal", "Tumor"))
 ratio.sub <- subset(ratio.sub,Tissue != "Blood")
@@ -273,8 +262,6 @@ ratio.sub$Cell.tissue <- paste0(ratio.sub$Global_Cluster,"_",ratio.sub$Tissue)
 
 ratio.sub$Global_Cluster <- factor(ratio.sub$Global_Cluster, levels = c("Th", "Treg", "CD8"))
 
-
-
 ggplot(ratio.sub, aes(x=Global_Cluster, y=ratio)) + 
     geom_boxplot(fill="gray")+
     facet_wrap(~Tissue)+theme_classic()+theme(axis.text = element_text(size = 12,colour = "black"))+rotate_x_text(45)  +theme(axis.title = element_text(size = 14,face = "bold"),strip.text = element_text(size = 12,face = "bold"))+ylab("%LOY (scRNA-seq)")+ xlab( "")
@@ -285,16 +272,13 @@ wilcox.test(as.data.frame(subset(ratio.sub, Tissue=="Normal"&Global_Cluster=="Tr
 wilcox.test(as.data.frame(subset(ratio.sub, Tissue=="Tumor"&Global_Cluster=="Treg"))$ratio, as.data.frame(subset(ratio.sub, Tissue=="Normal" &Global_Cluster=="Treg"))$ratio)
 
 wilcox.test(as.data.frame(subset(ratio.sub, Tissue=="Tumor"&Global_Cluster=="Treg"))$ratio, as.data.frame(subset(ratio.sub, Tissue=="Tumor" &Global_Cluster=="CD8"))$ratio)
-
-
 ```
 
 ```{r Experimental plots}
 
 # Results from ddPCR
-
-Tissues <- read.csv("/mnt/data1/elyas/Single-cell/LOY/CRC/Pic/New/Tissues (1).csv", sep=";")
-Treg <- read.csv("/mnt/data1/elyas/Single-cell/LOY/CRC/Pic/New/Treg_NonTreg_CD8.csv", sep=";")
+Tissues <- read.csv("./dir/Tissues (1).csv", sep=";")
+Treg <- read.csv("./dir/Treg_NonTreg_CD8.csv", sep=";")
 
 Tissue.list <- c()
 LOY <-c()
@@ -310,12 +294,10 @@ for (i in 1:6) {
  LOY2 <- c(LOY2,c(Treg[,i]) )
 }
 
-
 Tissues <- data.frame(Tissues=Tissue.list,
                       LOY=LOY)
 Treg <- data.frame(Tissues=Tissue.list2,
                       LOY=LOY2)
-
 
 Tissues$Type <- str_extract(Tissues$Tissues,".*_")
 Tissues$Tissue <- str_extract(Tissues$Tissues,"_.*")
@@ -328,9 +310,6 @@ Treg$Type <- sub("_","",Treg$Type)
 Treg$Cell <- sub("_","",Treg$Cell)
 Treg$Type <-sub("Ctrl", "Control", Treg$Type)
 
-
-
-
 # Tissues$Tissues <- sub("Normal","N",Tissues$Tissues)
 # Tissues$Tissues <- sub("Tumor","T",Tissues$Tissues)
 # Tissues$Tissues <- sub("Blood","B",Tissues$Tissues)
@@ -339,12 +318,9 @@ Tissues$Tissues <- factor(Tissues$Tissues, levels = c("CRC_T", "CRC_N", "CRC_B",
 Treg$Tissues <- factor(Treg$Tissues,levels = c(  "CRC_Th", "CRC_Treg",    "CRC_CD8",   "Ctrl_Th", "Ctrl_Treg",  "Ctrl_CD8") )
 Treg$Cell <- factor(Treg$Cell,levels = c(  "Th", "Treg",    "CD8") )
 
-
 ggplot(Tissues, aes(x=Tissue, y=LOY)) + 
     geom_boxplot(fill="gray")+
     facet_wrap(~Type)+theme_classic()+theme(axis.text = element_text(size = 12,colour = "black"))+rotate_x_text(45)  +theme(axis.title = element_text(size = 14,face = "bold"),strip.text = element_text(size = 12,face = "bold"))+ylab("%LOY (ddPCR)")+ xlab( "")
-
-
 
 ggplot(na.omit(Treg), aes(x=Cell, y=LOY)) + 
     geom_boxplot(fill="gray")+
