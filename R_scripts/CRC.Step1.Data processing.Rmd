@@ -21,10 +21,10 @@ library(ggpubr)
 
 ```{r Reading in the data}
 # Creating the Seurat Object
-setwd("/mnt/data1/elyas/Single-cell/LOY/CRC/")
-Count.10x <- read.table("../CRC/GSE146771_CRC.Leukocyte.10x.TPM.txt", header = TRUE)
+setwd("./dir")
+Count.10x <- read.table("./dir/GSE146771_CRC.Leukocyte.10x.TPM.txt", header = TRUE)
 
-meta.10x <- read.delim("/mnt/data1/elyas/Single-cell/LOY/CRC/GSE146771_CRC.Leukocyte.10x.Metadata.txt")
+meta.10x <- read.delim("./dir/GSE146771_CRC.Leukocyte.10x.Metadata.txt")
 
 int.10x <- intersect(names(Count.10x), meta.10x$CellName)
 
@@ -37,13 +37,13 @@ LOY.CRC.10x$Tissue <- sub("N","Normal", LOY.CRC.10x$Tissue)
 LOY.CRC.10x$Tissue <- sub("P","Blood", LOY.CRC.10x$Tissue)
 LOY.CRC.10x$Tissue <- sub("T","Tumor", LOY.CRC.10x$Tissue)
 
-saveRDS(LOY.CRC.10x, "../Github/LOY.CRC.rds")
+saveRDS(LOY.CRC.10x, "./dir/LOY.CRC.rds")
 ```
 
 
 
 ```{r Identifying LOY}
-LOY.CRC.10x <- readRDS("../Github/LOY.CRC.rds")
+LOY.CRC.10x <- readRDS("./dir/LOY.CRC.rds")
 
 LOY.CRC.10x <- SplitObject(LOY.CRC.10x, split.by = "Sample")
 # Adding ages to metadata
@@ -80,8 +80,6 @@ LOY.CRC.10x$`CD8 T cell` <- FindVariableFeatures(LOY.CRC.10x$`CD8 T cell`,verbos
 LOY.CRC.10x$`CD8 T cell` <- ScaleData(LOY.CRC.10x$`CD8 T cell`,verbose = F) 
 LOY.CRC.10x$`CD8 T cell` <- RunPCA(LOY.CRC.10x$`CD8 T cell`,verbose = F,npcs = 30) 
 LOY.CRC.10x$`CD8 T cell` <- RunUMAP(LOY.CRC.10x$`CD8 T cell`,verbose = F,dims = 1:30) 
-
-
 ```
 
 ```{r}
@@ -100,7 +98,6 @@ CD4.spl <- SplitObject(CD4, split.by = "Global_Cluster")
 CD4_Treg <- CD4.spl$Treg
 CD4_Th <- CD4.spl$Th 
 CD8 <- LOY.CRC.10x$`CD8 T cell`
-
 
 VlnPlot(CD4,group.by = "Treg.LOY", features = "percent.LOY", pt.size = 0)+ggtitle(bquote(''~CD4^"+"~"T cells"))
 
