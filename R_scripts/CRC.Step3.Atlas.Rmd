@@ -1,0 +1,277 @@
+---
+title: "CRC.Step3.Atlas"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo                  = TRUE
+                      ,warning              = FALSE
+                      ,message              = FALSE
+                      ,error                = TRUE
+                      ,dev                  = c('png','pdf')
+                      ,pdf.options(encoding = "ISOLatin9.enc", useKerning=FALSE, useDingbats=FALSE)
+)                      
+```
+
+
+```{r libraries}
+library(Seurat)
+library(ggplot2)
+library(ggpubr)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+```
+
+```{r Reading the data, fig.width=20, fig.height=5}
+
+
+dir1 <- "/mnt/data1/elyas/Single-cell/LOY/Atlas/"
+Metadata <- read.csv(paste0(dir1,"TICAtlas_metadata.csv"))
+# Count <- read.csv(paste0(dir1,"TICAtlas_integrated_matrix.csv"))
+# saveRDS(Count,(paste0(dir1,"Count.rds")))
+Count <- readRDS(paste0(dir1,"Count.rds"))
+# Atlas.w.s <- CreateSeuratObject(Count,project = "Atlas",assay = "RNA")
+# saveRDS(Atlas.w.s,(paste0(dir1,"TICAtlas.rds")))
+Atlas.w.s <- readRDS("/mnt/data1/elyas/Single-cell/LOY/Atlas/TICAtlas.rds")
+
+Metadata <- Metadata[match(colnames(Atlas.w.s@assays$RNA@data),rownames(Metadata)),]
+Atlas.w.s@meta.data <- Metadata
+
+LOY_genes <- c("RPS4Y1", "ZFY", "USP9Y", "DDX3Y", "KDM5D", "EIF1AY")
+Atlas.w.s[["percent.LOY"]] <- PercentageFeatureSet(Atlas.w.s, features = LOY_genes,assay = "RNA")
+Atlas.w.s$LOY <- ifelse(Atlas.w.s$percent.LOY==0,  "LOY", "non-LOY") 
+Atlas.w.s$gender[is.na(Atlas.w.s$gender)] <- "unknown"
+
+Atlas.w.s <- SplitObject(Atlas.w.s, split.by = "gender")
+
+# Distinguishing the profiles based on gender
+male <- Atlas.w.s$male
+unknown <- Atlas.w.s$unknown
+female <- Atlas.w.s$female
+
+
+#Percentage of Y gene expression in different genders to find the sex for unknown gender
+VlnPlot(unknown, features = "percent.LOY",group.by = "patient",assay = "RNA",ncol = 1)+ylim(0,3)+ggtitle("Percentage of Y gene expression in unknwon gender")+ theme(legend.position="")
+VlnPlot(male, features = "percent.LOY",group.by = "patient",assay = "RNA",ncol = 1)+ylim(0,3)+ggtitle("Percentage of Y gene expression in males") + theme(legend.position="")
+VlnPlot(female, features = "percent.LOY",group.by = "patient",assay = "RNA",ncol = 1)+ylim(0,3)+ggtitle("Percentage of Y gene expression in females") + theme(legend.position="")
+```
+
+```{r defyning the unknown gender,fig.width=15, fig.height=4}
+unknown <- SplitObject(unknown,split.by = "patient")
+
+# Merging the patients with unknown gender who express the Y dependent genes
+unknown.male <- Reduce(merge, c(unknown$LUN1,unknown$MEL1_5,unknown$MEL2_1,unknown$MEL2_10,unknown$MEL2_11,unknown$MEL2_12,unknown$MEL2_13,unknown$MEL2_17,unknown$MEL2_18,
+                         unknown$MEL2_2,unknown$MEL2_3,unknown$MEL2_6,unknown$MEL2_7,unknown$MEL2_8,unknown$MEL2_9,unknown$SC_1,
+               unknown$SC_10,unknown$SC_12,unknown$SC_13,unknown$SC_14,unknown$SC_15,unknown$SC_2,unknown$SC_3,unknown$SC_4,unknown$SC_5,unknown$SC_8,unknown$SC_9))
+
+VlnPlot(unknown.male,features = "percent.LOY", group.by = "patient",ncol = 1)+ theme(legend.position="")+ggtitle("Percentage of Y gene expression in predicted males from unknown gender")
+
+unknown.male$gender <- "male.p"
+
+# merging the male and defined male gender in unknown group
+male <- merge(unknown.male,male)
+saveRDS(male, "/mnt/data1/elyas/Single-cell/LOY/Atlas/male.rds")
+```
+
+
+```{r Table}
+male <- readRDS("/mnt/data1/elyas/Single-cell/LOY/Atlas/male.rds")
+
+male <- FindVariableFeatures(male,assay = "RNA",verbose = F)
+male@assays$integrated@var.features <- rownames(male@assays$integrated@data)
+  male <- ScaleData(male,verbose = F,assay = "integrated") 
+  male <- RunPCA(male,verbose = F,npcs = 30,assay = "integrated") 
+  male <- RunUMAP(male,verbose = F,dims = 1:30,assay = "integrated") 
+
+  male$subtype <- factor(male$subtype, levels = c("NSCLC","CRC","HCC","ICC","CM","PDAC","BCC","SCC","UM","RCC"))
+
+report1 <- as.data.frame(table(male$subtype,male$source,male$patient))
+report2 <- as.data.frame(table(male$subtype,male$source))
+
+report1 <- subset(report1,Freq !=0 )
+report2 <- subset(report2,Freq !=0 )
+report2$Patients.n <- c(11,4,5,12,1,20,13,2,11,8,4,4)
+table(report1$Var1)
+
+DimPlot(male, group.by = "subtype")
+```
+
+```{r Defining the percentage of LOY}
+df <- as.data.frame(table(male$patient,male$gender,male$subtype,male$source,male$lv1_annot,male$LOY))
+names(df) <- c("patient","gender","subtype","source","lv1_annot","LOY","Freq")
+df <- subset(df, Freq !=0)
+
+df <- df[
+  with(df, order(patient,lv1_annot, LOY)),
+]
+rownames(df) <- NULL
+
+df <- subset(df, patient != "CRC_12")
+
+patients <- c(unique(df$patient))
+Cell <- c(unique(df$lv1_annot))
+z <- data.frame(matrix(ncol = 6))
+colnames(z) <- c("Patient","Cell.Type","Cancer", "source","Sum","LOY.Percentage")
+for (i in patients) {
+  for (j in Cell) {
+    x <- subset(df,patient==i & lv1_annot==j)
+    y <- data.frame(Patient=i,
+                    Cell.Type=j,
+                    Cancer=x$subtype[1],
+                    source=x$source[1],
+                    Sum=x$Freq[1]+x$Freq[2],
+                    LOY.Percentage= (x$Freq[1]/(x$Freq[1]+x$Freq[2]))*100)
+    z <- rbind(z,y)
+  }
+}
+
+
+z <- na.omit(z)
+z <- subset(z, Sum>50)
+
+saveRDS(z,"/mnt/data1/elyas/Single-cell/LOY/Atlas/loy.perc.RDS")
+```
+
+```{r Plot LOY}
+# Defining per cell type LOY percentage 
+
+z <- readRDS("/mnt/data1/elyas/Single-cell/LOY/Atlas/loy.perc.RDS")
+z <- subset(z, Sum>50 & Cancer!= "NSCLC" &Cancer!= "RCC")
+
+
+z$Cancer <- factor(z$Cancer, levels = c("CRC",  "HCC",  "ICC",  "CM",   "PDAC", "BCC",  "SCC",  "UM"))
+
+
+
+
+CH <- ggboxplot(z , x = "Cancer", y = "LOY.Percentage"
+,fill = "Cancer"
+,ylab = ("LOY(%)"), xlab = "Cancer types")+rotate_x_text(45)+ theme(axis.text = element_text(size = 12))+rotate_x_text(45)+theme(axis.title = element_text(size = 14,face = "bold")) + theme(legend.position="")
+
+CH+scale_fill_manual(values=c("cyan2",
+                               "grey",
+                               "grey",
+                               "grey",
+                               "grey",
+                               "grey",
+                               "grey",
+                               "grey"))
+```
+
+```{r, fig.width=8, fig.height=6}
+z$Cell.Type.new <- sub("CD4.*", "Th", z$Cell.Type)
+z$Cell.Type.new <- sub("T helper cells", "Th", z$Cell.Type.new)
+z$Cell.Type.new <- sub("T cells naive", "Th", z$Cell.Type.new)
+z$Cell.Type.new <- sub("CD8.*", "CD8 T cells", z$Cell.Type.new)
+z$Cell.Type.new <- sub("T cells regulatory", "Treg", z$Cell.Type.new)
+
+treg <- subset(z, z$Cell.Type.new %in% c("Th" ,"Treg" ))
+treg$Cell.Type.new <- as.character(treg$Cell.Type.new)
+treg$Cell.Type.new <- factor(treg$Cell.Type.new, levels=c("Th" ,"Treg"))
+
+
+
+CH <- ggboxplot(treg , x = "Cell.Type.new", y = "LOY.Percentage"
+,color = "black",fill="Cancer",
+ylab = ("LOY(%)"), xlab = "Cell type")+rotate_x_text(35)+ theme(title =element_text(size=16, face='bold'),
+ legend.text = element_text(size=15), 
+ axis.text=element_text(size=14))+facet_wrap(.~Cancer,scales="free", ncol = 4)+ylim(0,100)+theme(legend.position = "")
+
+
+
+CH <-ggplot(treg, aes(x=Cell.Type.new, y=LOY.Percentage,fill=Cancer)) + 
+    geom_boxplot()+theme_classic()+theme(axis.text = element_text(size = 12,colour = "black"))+rotate_x_text(45)  +theme(axis.title = element_text(size = 14,face = "bold"),strip.text = element_text(size = 12,face = "bold"),legend.position = "none")+ylab("%LOY (scRNA-seq)")+ xlab( "")+facet_wrap(~Cancer, ncol = 4)
+
+
+
+
+CH+scale_fill_manual(values=c("cyan2",
+                               "grey",
+                               "grey",
+                               "grey",
+                               "grey",
+                               "grey",
+                               "grey",
+                               "grey"))
+
+colSums(subset(treg,Cancer=="CRC"&Cell.Type.new=="Treg")[,5:6])
+colSums(subset(treg,Cancer=="CRC"&Cell.Type.new=="Th")[,5:6])
+
+
+for (i in c(unique(treg$Cancer))[-3]) {
+ print( wilcox.test(subset(treg,Cell.Type.new=="Th"&Cancer==i)$LOY.Percentage, subset(treg,Cell.Type.new=="Treg"&Cancer==i)$LOY.Percentage,
+                 p.adjust.method = "bonf"))
+}
+
+
+wilcox.test(subset(treg,Cell.Type.new=="Th"&Cancer=="CRC")$LOY.Percentage, subset(treg,Cell.Type.new=="Treg"&Cancer=="CRC")$LOY.Percentage,
+                 p.adjust.method = "bonf")
+
+
+```
+
+
+```{r}
+
+CRC <- male$CRC
+CRC <- SplitObject(CRC, split.by = "lv1_annot")
+CRC <- CRC$`T cells regulatory`
+
+CRC <- FindVariableFeatures(CRC)
+CRC <- ScaleData(CRC)
+CRC <- RunPCA(CRC)
+CRC <- RunUMAP(CRC, dims = 1:20)
+CRC <- SetIdent(CRC,value = "LOY")
+CRC$LOY <-sub("nonLOY","non-LOY",CRC$LOY)
+CRC$LOY <- factor(CRC$LOY,levels = c("non-LOY","LOY"), ordered = TRUE)
+
+gene.list <- c("PDCD1","TIGIT","IKZF2")
+
+j=15
+c=1
+y <- setNames(replicate(3,data.frame()),gene.list)
+
+# figure <- ggplot(df) + geom_point() + xlim(0, 10) + ylim(0, 100)
+
+for (i in gene.list) {
+  
+CRC <- AddModuleScore(CRC, features = i,name = paste0(i,"_score"),seed = 1)
+score <- subset(as.data.frame(table(CRC$LOY,CRC@meta.data[,j])), Freq>0)
+score$Var2 <- as.numeric(as.character(score$Var2))
+names(score) <- c("Treg_LOY_stat", "Score of expression","Frequency")
+
+y[[c]] <- VlnPlot(CRC, features = colnames(CRC@meta.data)[j],pt.size = 0,group.by = "LOY")+ylab("Expression score")+ggtitle(paste0(i))+stat_summary(fun.y = median, geom='point', size = 25, colour = "black", shape = 95)+theme(legend.position = "none")+scale_fill_manual(values=c("#00BFB4","#F8766D"))+ylim(0,4)
+
+print(wilcox.test(as.data.frame(subset(score, Treg_LOY_stat=="LOY"))$`Score of expression`,  as.data.frame(subset(score, Treg_LOY_stat=="non-LOY"))$`Score of expression`))
+
+j=j+1
+c=c+1
+}
+
+
+
+
+figure <- ggarrange(y$PDCD1,y$TIGIT,y$IKZF2, 
+                    ncol = 3, nrow = 1)
+figure
+
+
+
+vln.df <- data.frame(Scores=c(CRC$PDCD1_score1,CRC$TIGIT_score1,CRC$IKZF2_score1),
+                     LOY=rep(CRC$LOY,3),
+           Gene=c(rep("PDCD1",length(CRC$PDCD1_score1)),  rep("TIGIT",length(CRC$TIGIT_score1)),
+           rep("IKZF2",length(CRC$IKZF2_score1)))
+           )
+library(ggplot2)
+library(introdataviz)
+
+ggplot(vln.df, aes(x = Gene, y = Scores, fill = LOY)) +
+  geom_split_violin()+ylim(0,4)+stat_summary(fun = mean, fun.min = mean, fun.max = mean,
+               geom = "crossbar", 
+               width = 0.25,
+               position = position_dodge(width = .25))+guides(fill = guide_legend(override.aes = list(linetype = 0)),
+         color = guide_legend(override.aes = list(linetype = 0)))+theme_classic()+theme(axis.text = element_text(size = 12,colour = "black"))+rotate_x_text(45)  +theme(axis.title = element_text(size = 14,face = "bold"),strip.text = element_text(size = 12,face = "bold"))+ylab("Expression scores")+ xlab( "Immunosupressive genes in Tregs")+scale_fill_manual(values=c("#00BFB4","#F8766D"))
+```
+
+
