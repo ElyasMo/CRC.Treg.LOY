@@ -9,7 +9,7 @@ Please find the codes in R_scripts directory
 
 ## Cite
 
-Please cite our artile in case of using the codes and materials:
+Please cite our artile in case of using the codes:
 
 Wójcik, M., Juhas, U., Mohammadi, E. et al. Loss of Y in regulatory T lymphocytes in the tumor micro-environment of primary colorectal cancers and liver metastases. Sci Rep 14, 9458 (2024). https://doi.org/10.1038/s41598-024-60049-y
 
