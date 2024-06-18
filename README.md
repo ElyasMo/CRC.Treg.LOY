@@ -6,3 +6,10 @@ We hypothesized that in Colorectal cancer (CRC), Lose of Chromosome Y (LOY) may 
 
 ## Scripts
 Please find the codes in R_scripts directory
+
+## Cite
+
+Please cite our artile in terms of using the codes and materials:
+
+Wójcik, M., Juhas, U., Mohammadi, E. et al. Loss of Y in regulatory T lymphocytes in the tumor micro-environment of primary colorectal cancers and liver metastases. Sci Rep 14, 9458 (2024). https://doi.org/10.1038/s41598-024-60049-y
+
